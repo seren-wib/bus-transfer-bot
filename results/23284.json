@@ -1,0 +1,74 @@
+[
+ {
+  "platform_stop_id": 106041,
+  "platform_name": "지하철2호선강남역(중)",
+  "ars": "22012",
+  "type": "간선",
+  "walk_m": 494,
+  "walk_min": 5.9,
+  "line_Y": "741",
+  "line_Y_id": 1072,
+  "si_to_B_ride_min": 28.0,
+  "alight_name": "광화문역(중)",
+  "final_walk_m": 722,
+  "final_walk_min": 8.7,
+  "wait_min": 4.4,
+  "wait_source": "realtime+headway",
+  "arrival_offset_min": 33.2,
+  "live_buses_min": [
+   0.6,
+   10.6
+  ],
+  "headway": "9분",
+  "read_at": "2026-11-01T13:36:27+09:00",
+  "si_to_B_total_min": 47.0
+ },
+ {
+  "platform_stop_id": 106041,
+  "platform_name": "지하철2호선강남역(중)",
+  "ars": "22012",
+  "type": "간선",
+  "walk_m": 494,
+  "walk_min": 5.9,
+  "line_Y": "470",
+  "line_Y_id": 1071,
+  "si_to_B_ride_min": 28.0,
+  "alight_name": "광화문역(중)",
+  "final_walk_m": 722,
+  "final_walk_min": 8.7,
+  "wait_min": 6.7,
+  "wait_source": "realtime+headway",
+  "arrival_offset_min": 33.2,
+  "live_buses_min": [
+   9.4,
+   26.9
+  ],
+  "headway": "13분",
+  "read_at": "2026-11-01T13:36:27+09:00",
+  "si_to_B_total_min": 49.3
+ },
+ {
+  "platform_stop_id": 106041,
+  "platform_name": "지하철2호선강남역(중)",
+  "ars": "22012",
+  "type": "간선",
+  "walk_m": 494,
+  "walk_min": 5.9,
+  "line_Y": "402",
+  "line_Y_id": 1050,
+  "si_to_B_ride_min": 39.0,
+  "alight_name": "시청역1호선.서울시청",
+  "final_walk_m": 1028,
+  "final_walk_min": 12.3,
+  "wait_min": 11.8,
+  "wait_source": "realtime+headway",
+  "arrival_offset_min": 33.2,
+  "live_buses_min": [
+   15.7,
+   19.0
+  ],
+  "headway": "13분",
+  "read_at": "2026-11-01T13:36:27+09:00",
+  "si_to_B_total_min": 69.0
+ }
+]

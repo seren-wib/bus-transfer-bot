@@ -1,0 +1,30 @@
+{
+ "generated_at": "2026-11-01T13:36:15+09:00",
+ "origin": [
+  37.504935,
+  127.064147
+ ],
+ "line": "740",
+ "s0": "한국무역센터.삼성역",
+ "s0_ars": "23201",
+ "walk_m": 564,
+ "walk_src": "router",
+ "walk_min": 6.8,
+ "live_buses": [
+  {
+   "min": 4.1,
+   "stops_away": 3,
+   "plate": "서울74사7305",
+   "congestion": "여유"
+  },
+  {
+   "min": 15.3,
+   "stops_away": 8,
+   "plate": "서울74사8376",
+   "congestion": "보통"
+  }
+ ],
+ "wait_min": 8.6,
+ "n_tasks": 15,
+ "sec": 8.49
+}

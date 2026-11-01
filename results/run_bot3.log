@@ -1,0 +1,6 @@
+{'si': '23277', 'ok': True, 'n': 0, 'sec': 2.88}
+{'si': '23284', 'ok': True, 'n': 3, 'sec': 4.94}
+{'si': '22169', 'ok': True, 'n': 0, 'sec': 3.81}
+{'si': '22135', 'ok': True, 'n': 0, 'sec': 4.75}
+{'si': '22382', 'ok': True, 'n': 3, 'sec': 3.54}
+tasks/bot3.json: 5 stops in 8.60s (incl. browser start)

@@ -1,4 +1,5 @@
 import asyncio, json, time
+from pathlib import Path
 from naver import NaverMap, GWANGHWAMUN
 
 def show(r):
@@ -47,6 +48,6 @@ async def main():
         for tag in sorted({t for t, _ in nm.timings}):
             v = [d for t, d in nm.timings if t == tag]
             print(f"timing {tag}: n={len(v)} median {stt.median(v):.2f}s max {max(v):.2f}s")
-    json.dump(out, open("results/test_output.json", "w"), ensure_ascii=False, indent=1)
+    Path("results/raw").mkdir(parents=True, exist_ok=True); json.dump(out, open("results/raw/test_output.json", "w"), ensure_ascii=False, indent=1)
 
 asyncio.run(main())

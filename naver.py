@@ -11,7 +11,7 @@ Endpoints (found by intercepting map.naver.com page traffic, 2026-11-01):
 Plain lon/lat works for start/goal, so raw GPS can be used directly. A bus stop as origin = its coords.
 """
 from __future__ import annotations
-import asyncio, math, time, urllib.parse
+import asyncio, re, math, time, urllib.parse
 from datetime import datetime, timezone, timedelta
 from playwright.async_api import async_playwright
 
@@ -78,9 +78,6 @@ def parse_path(p: dict) -> dict:
             "wait_min": _ms_min(p.get("waitingDuration")), "transfers": p.get("transferCount"),
             "dep": p.get("departureTime"), "arr": p.get("arrivalTime"),
             "bus_only": bool(transit) and all(s["mode"] == "BUS" for s in transit),
-            # e.g. '새벽A741(자율주행)(토,일 미운행)' was returned on a Sunday -> flag, caller should drop it
-            "suspect_service": any("미운행" in l["name"] or "새벽" in l["name"]
-                                   for s in transit for l in s.get("lines", [])),
             "summary": " > ".join(
                 (f"walk {s['distance_m']}m" if s["mode"] == "WALKING" else
                  f"{s['mode']} {'/'.join(l['name'] for l in s['lines'])} "
@@ -100,12 +97,73 @@ def parse_arrival(a: dict) -> dict:
             "reference": arr.get("referenceTime")}
 
 
+# ---------------- service-day / hours filter (hard drop, see docs/requirements.md R4) ----------------
+_DOW_KO = "월화수목금토일"
+
+
+def _dow_bit(d: datetime) -> int:
+    """Naver calendar bitmask: Sun=1, Mon=2 ... Sat=64."""
+    return 1 << ((d.weekday() + 1) % 7)
+
+
+def name_not_running(name: str, when: datetime) -> str | None:
+    """Reason string if the line name/notes say it is not running at `when`, else None."""
+    if not name:
+        return None
+    wd, h = when.weekday(), when.hour
+    weekend = wd >= 5
+    for m in re.finditer(r"\(([^)]*)미운행\)", name):
+        days = m.group(1)
+        if _DOW_KO[wd] in days or ("공휴일" in days and wd == 6) or ("주말" in days and weekend):
+            return f"name: {m.group(0)}"
+    if "미운행" in name and not re.search(r"\([^)]*미운행\)", name):
+        return "name: 미운행"
+    if weekend and any(k in name for k in ("평일만", "평일", "출근", "퇴근")):
+        return "name: weekday-only"
+    if "새벽" in name and not (3 <= h < 7):
+        return "name: 새벽 (dawn-only)"
+    if re.match(r"^N\d", name) and 5 <= h < 23:
+        return "name: N night bus"
+    return None
+
+
+def _hm(t: str) -> int:
+    hh, mm = map(int, t.split(":"))
+    return hh * 60 + mm
+
+
+def schedule_not_running(detail: dict, when: datetime, pass_window_min: int = 90) -> str | None:
+    """Reason if the route detail's calendar/first-last times exclude `when` (time the user boards)."""
+    sch = (detail or {}).get("schedule") or {}
+    times = sch.get("startPointTimes") or []
+    bit = _dow_bit(when)
+    if times:
+        today = [t for t in times if (t.get("calendar") or {}).get("dows", 0) & bit]
+        if not today:
+            return "calendar: no service today"
+        first, last = today[0].get("firstTime"), today[0].get("lastTime")
+    else:
+        sp = sch.get("startPoint") or {}
+        first, last = sp.get("firstTime"), sp.get("lastTime")
+    if not first or not last:
+        return None
+    f, l = _hm(first), _hm(last) + pass_window_min
+    if l <= f:  # last bus after midnight
+        l += 24 * 60
+    now = when.hour * 60 + when.minute
+    if not (f <= now <= l or f <= now + 24 * 60 <= l):
+        return f"hours: {first}~{last}"
+    return None
+
+
 class NaverMap:
     """async with NaverMap(concurrency=8) as nm: routes = await nm.directions((lat,lon), GWANGHWAMUN)"""
 
     def __init__(self, concurrency: int = 8, headless: bool = True):
         self.concurrency, self.headless = concurrency, headless
         self.timings: list[tuple[str, float]] = []
+        self._route_cache: dict[int, dict] = {}
+        self.dropped: list[dict] = []  # log only; dropped lines never reach results
 
     async def __aenter__(self):
         self._pw = await async_playwright().start()
@@ -149,8 +207,60 @@ class NaverMap:
         return await self._get(f"/directions/transit?{q}", "directions")
 
     # ---- public ----
-    async def directions(self, start, goal, departure=None, bus_only=False, with_arrivals=True) -> list[dict]:
-        """start/goal: (lat,lon) | {'lat','lon','placeid'} | {'stop_id': N} (bus stop as origin)."""
+    async def route_detail(self, route_id: int) -> dict:
+        if route_id not in self._route_cache:
+            self._route_cache[route_id] = await self._get(f"/pubtrans/bus/routes/{route_id}", "route")
+        return self._route_cache[route_id]
+
+    async def filter_running(self, routes: list[dict], when: datetime | None = None,
+                             max_board_gap_min: int = 120) -> list[dict]:
+        """Hard filter: remove bus lines not running at `when` (user's departure, default now); drop a path if a
+        transit step loses all its lines, or if the router plans a boarding more than max_board_gap_min later."""
+        when = when or datetime.now(KST)
+        ids = {l["id"] for r in routes for s in r["steps"] if s["mode"] == "BUS" for l in s["lines"]}
+        details = await asyncio.gather(*[self.route_detail(i) for i in ids], return_exceptions=True)
+        det = {i: d for i, d in zip(ids, details) if not isinstance(d, Exception)}
+        keep = []
+        for r in routes:
+            ok = True
+            for s in r["steps"]:
+                if s["mode"] != "BUS":
+                    continue
+                # checks use the user's time (query/departure), NOT the router's planned boarding time:
+                # the router happily plans a dawn bus for tomorrow 05:09 (seen with 새벽A741 on Sunday 13:30).
+                t, gap_why = when, None
+                try:
+                    if s.get("dep"):
+                        dep = datetime.fromisoformat(s["dep"])
+                        dep = dep if dep.tzinfo else dep.replace(tzinfo=KST)
+                        if (dep - when).total_seconds() > max_board_gap_min * 60:
+                            gap_why = f"router boards at {dep.isoformat()} (> {max_board_gap_min} min after now)"
+                except ValueError:
+                    pass
+                good = []
+                for l in s["lines"]:
+                    why = (name_not_running(l["name"], t) or schedule_not_running(det.get(l["id"]), t)
+                           or gap_why)
+                    if why:
+                        self.dropped.append({"line": l["name"], "id": l["id"], "at": t.isoformat(), "why": why})
+                    else:
+                        good.append(l)
+                s["lines"] = good
+                if not good:
+                    ok = False
+            if ok:
+                r["summary"] = " > ".join(
+                    (f"walk {s['distance_m']}m" if s["mode"] == "WALKING" else
+                     f"{s['mode']} {'/'.join(l['name'] for l in s['lines'])} "
+                     f"[{s['board']['name'] if s['board'] else ''}→{s['alight']['name'] if s['alight'] else ''}]")
+                    for s in r["steps"])
+                keep.append(r)
+        return keep
+
+    async def directions(self, start, goal, departure=None, bus_only=False, with_arrivals=True,
+                         running_only=True) -> list[dict]:
+        """start/goal: (lat,lon) | {'lat','lon','placeid'} | {'stop_id': N} (bus stop as origin).
+        running_only (default): lines not running at boarding time are removed (never returned)."""
         if isinstance(start, dict) and "stop_id" in start:
             s = await self.stop(start["stop_id"])
             start = (s["lat"], s["lon"])
@@ -158,6 +268,8 @@ class NaverMap:
         routes = [parse_path(p) for p in raw.get("paths", [])]
         if bus_only:
             routes = [r for r in routes if r["bus_only"]]
+        if running_only:
+            routes = await self.filter_running(routes, departure)
         if with_arrivals and routes:
             await self.attach_arrivals(routes)
         return routes

@@ -26,21 +26,18 @@ Bus only, first transfer only, platform moves inside a hub only. See `docs/requi
 
 ---
 
-# bus-optimizer — map data layer (2026-11-01)
+# bus-optimizer (2026-11-01)
 
-- `naver.py`  NaverMap client (headless Playwright Chromium + Playwright APIRequestContext → Naver JSON APIs). Concurrent via asyncio semaphore.
-  - `directions(start, goal, bus_only=, with_arrivals=)` start = (lat,lon) raw GPS | {'stop_id':N} | {'lat','lon','placeid'}
-  - `arrivals(stop_id)`, `stop(stop_id)` (coords, ARS, routes), `route(route_id, after_stop_name=)` (full line stop list)
-  - `nearby_transfer_options(stop_id, goal, max_walk_m=500)` router-based ≤500 m walk transfer candidates
-  - `stops_within(center, stops, radius_m)` haversine filter
-- `gmaps.py`  Google Maps transit probe (DOM scrape, ~1.2–2 s/query).
-- `test_naver.py` → `results/test_log.txt`, `results/test_output.json`
-- `probes/`  raw exploration scripts/samples (Kakao attempts, sample JSON).
+요구사항: docs/requirements.md · 진행: docs/progress.md · API 메모: docs/api_notes.md · 카카오 비교: docs/kakao_comparison.md
 
-Naver endpoints (all GET, no login, plain lon,lat accepted):
-- /p/api/directions/transit?start=LON,LAT&goal=LON,LAT[,placeid=ID]&mode=TIME&departureTime=ISO+09:00
-- /p/api/pubtrans/realtime/bus/arrivals?stopId=ID&base=realtime,schedule
-- /p/api/pubtrans/realtime/bus/arrivals/multi?stations=STOP,ROUTE:STOP,ROUTE&base=realtime,schedule
-- /p/api/pubtrans/bus/stops/ID
-- /p/api/pubtrans/bus/routes/ROUTE_ID
-Kakao: /route/pubtrans.json is gated by a proof-of-work header (x-kmap-captcha-token); headless page also fails to load the map SDK → not working yet.
+- `naver.py`: NaverMap 클라이언트. 헤드리스 Playwright Chromium의 요청 컨텍스트로 네이버 JSON API를 부르고, asyncio로 동시에 처리한다.
+  - `directions(start, goal, departure=, bus_only=, with_arrivals=, running_only=True)`
+    - start: (lat,lon) GPS | {'stop_id':N} | {'lat','lon','placeid'}
+    - 지금 운행하지 않는 노선은 기본으로 완전히 뺀다(`filter_running`, `name_not_running`, `schedule_not_running`).
+  - `arrivals(stop_id)`, `stop(stop_id)`, `route(route_id)`, `route_detail(route_id)`, `nearby_transfer_options(...)`
+- `search_bot.py`: 검색 워커(R3/R4/R5/R9). 실행은 `python search_bot.py tasks/bot1.json --goal LON,LAT[,placeid=N]`이고 `results/{si}.json`을 쓴다.
+- `make_tasks.py`: 테스트용 작업 파일 생성기. 노선 X의 s0 이후 정류장, A→si 분, arrive_at_si를 만든다.
+- `summarize_results.py`: tasks와 results를 합쳐 A→B 총분 순위를 출력하고 `results/summary.json`을 쓴다.
+- `gmaps.py`: 구글맵 대중교통 결과를 DOM에서 읽는다.
+- `test_naver.py`: 1단계 측정. 원본 덤프는 `results/raw/`에 쓴다(git 제외).
+- `tests/test_filters.py`: 운행하지 않는 노선 제외 테스트. 일요일 새벽A741 제외를 확인한다.
