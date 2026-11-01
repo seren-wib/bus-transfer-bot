@@ -23,3 +23,24 @@ Built at the Grok Bot hackathon on 2026-11-01.
 ## Scope
 
 Bus only, first transfer only, platform moves inside a hub only. See `docs/requirements.md` for the full in/out list.
+
+---
+
+# bus-optimizer — map data layer (2026-11-01)
+
+- `naver.py`  NaverMap client (headless Playwright Chromium + Playwright APIRequestContext → Naver JSON APIs). Concurrent via asyncio semaphore.
+  - `directions(start, goal, bus_only=, with_arrivals=)` start = (lat,lon) raw GPS | {'stop_id':N} | {'lat','lon','placeid'}
+  - `arrivals(stop_id)`, `stop(stop_id)` (coords, ARS, routes), `route(route_id, after_stop_name=)` (full line stop list)
+  - `nearby_transfer_options(stop_id, goal, max_walk_m=500)` router-based ≤500 m walk transfer candidates
+  - `stops_within(center, stops, radius_m)` haversine filter
+- `gmaps.py`  Google Maps transit probe (DOM scrape, ~1.2–2 s/query).
+- `test_naver.py` → `results/test_log.txt`, `results/test_output.json`
+- `probes/`  raw exploration scripts/samples (Kakao attempts, sample JSON).
+
+Naver endpoints (all GET, no login, plain lon,lat accepted):
+- /p/api/directions/transit?start=LON,LAT&goal=LON,LAT[,placeid=ID]&mode=TIME&departureTime=ISO+09:00
+- /p/api/pubtrans/realtime/bus/arrivals?stopId=ID&base=realtime,schedule
+- /p/api/pubtrans/realtime/bus/arrivals/multi?stations=STOP,ROUTE:STOP,ROUTE&base=realtime,schedule
+- /p/api/pubtrans/bus/stops/ID
+- /p/api/pubtrans/bus/routes/ROUTE_ID
+Kakao: /route/pubtrans.json is gated by a proof-of-work header (x-kmap-captcha-token); headless page also fails to load the map SDK → not working yet.
