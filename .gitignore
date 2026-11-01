@@ -4,3 +4,6 @@ node_modules/
 *.log
 playwright-report/
 test-results/
+.venv/
+__pycache__/
+*.pyc
